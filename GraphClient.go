@@ -49,6 +49,20 @@ func NewGraphClient(tenantID, applicationID, clientSecret string) (*GraphClient,
 	return &g, g.refreshToken()
 }
 
+// NewDelgatedGraphClient creates a new GraphClient instance using the given parameters but also
+// allows the user to supply a pre-existing token that has been retreived by some other means.
+func NewDelgatedGraphClient(tenantID, applicationID, clientSecret string, token Token) (*GraphClient, error) {
+	g := GraphClient{
+		TenantID:      tenantID,
+		ApplicationID: applicationID,
+		ClientSecret:  clientSecret,
+		token:         token,
+	}
+	//g.apiCall.Lock()
+	//defer g.apiCall.Unlock()
+	return &g, nil
+}
+
 // refreshToken refreshes the current Token. Grab's a new one and saves it within the GraphClient instance
 func (g *GraphClient) refreshToken() error {
 	if g.TenantID == "" {
@@ -166,6 +180,20 @@ func (g *GraphClient) ListUsers() (Users, error) {
 	return marsh.Users, err
 }
 
+// ListUsersWithFilter gets a list of users who match the provided filter
+func (g *GraphClient) ListUsersWithFilter(filter string) (Users, error) {
+	resource := "/users"
+	var marsh struct {
+		Users Users `json:"value"`
+	}
+	params := url.Values{
+		"$filter": []string{filter},
+	}
+	err := g.makeGETAPICall(resource, params, &marsh)
+	marsh.Users.setGraphClient(g)
+	return marsh.Users, err
+}
+
 // ListGroups returns a list of all groups
 //
 // Reference: https://developer.microsoft.com/en-us/graph/docs/api-reference/v1.0/api/group_list
@@ -176,6 +204,21 @@ func (g *GraphClient) ListGroups() (Groups, error) {
 		Groups Groups `json:"value"`
 	}
 	err := g.makeGETAPICall(resource, nil, &marsh)
+	marsh.Groups.setGraphClient(g)
+	return marsh.Groups, err
+}
+
+// ListGroupsWithFilter gets a list of groups that match the provided filter
+func (g *GraphClient) ListGroupsWithFilter(filter string) (Groups, error) {
+	resource := "/groups"
+
+	var marsh struct {
+		Groups Groups `json:"value"`
+	}
+	params := url.Values{
+		"$filter": []string{filter},
+	}
+	err := g.makeGETAPICall(resource, params, &marsh)
 	marsh.Groups.setGraphClient(g)
 	return marsh.Groups, err
 }
@@ -199,6 +242,19 @@ func (g *GraphClient) GetGroup(groupID string) (Group, error) {
 	group := Group{graphClient: g}
 	err := g.makeGETAPICall(resource, nil, &group)
 	return group, err
+}
+
+// GetGroupMembers returns the group's members, identified by the given groupID.
+//
+// Reference: https://developer.microsoft.com/en-us/graph/docs/api-reference/v1.0/api/group_get
+func (g *GraphClient) GetGroupMembers(groupID string) (Users, error) {
+	resource := fmt.Sprintf("/groups/%v/members", groupID)
+	var marsh struct {
+		Users Users `json:"value"`
+	}
+	err := g.makeGETAPICall(resource, nil, &marsh)
+	marsh.Users.setGraphClient(g)
+	return marsh.Users, err
 }
 
 // UnmarshalJSON implements the json unmarshal to be used by the json-library.
